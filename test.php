@@ -1,19 +1,39 @@
 <?php
 
-// declare(ticks=100);
+memtrigger_init(5);
+
+$MB = 1024 * 1024;
+
+memtrigger_register('logFunction', 4 * $MB);
+memtrigger_register('logAndGC', 8 * $MB, 8 * $MB, 0);
+memtrigger_register('throwException', 32 * $MB, 32 * $MB, 0);
+
+try {
+	useLotsOfMemory();
+}
+catch (\Exception $e) {
+	echo "Exception caught: ".$e->getMessage();
+}
+
+printf("\nused: %10d | allocated: %10d | peak: %10d\n",
+	memory_get_usage(),
+	memory_get_usage(true),
+	memory_get_peak_usage(true)
+);
+
+exit(0);
 
 
 function logFunction()
 {
-	echo "Memory warning limit exceeded.\n";
+	echo "Memory info limit exceeded.\n";
 }
 
 function logAndGC()
 {
-	echo "******************";
-	echo "Memory danger limit exceeded exceeded, calling GC when mem usage at ".memory_get_usage(true)."\n";
+	echo "** Memory warning limit exceeded exceeded, calling GC when mem usage at ".number_format(memory_get_usage(false))."\n";
 	gc_collect_cycles();
-	echo "Mem used now : ".memory_get_usage(true)."\n";
+	echo "** Mem used now : ".number_format(memory_get_usage(false))."\n";
 }
 
 
@@ -23,72 +43,44 @@ function throwException()
 }
 
 
-function abortOperation()
+// This function creates a cyclic variable loop
+function useSomeMemory($x)
 {
-	throw new \Exception("Too much memory being used");
+	$data = [];
+	$data[$x] = file_get_contents("memdata.txt");
+	$data[$x + 1] = &$data;
 }
 
-memtrigger_init(500);
-
-//memtrigger_register('logFunction', 1024 * 1024 * 4);
-//memtrigger_register('logAndGC', 1024 * 1024 * 8, 1024 * 1024 * 8, 0);
-memtrigger_register('throwException', 1024 * 1024 * 16);
-//memtrigger_register('abortOperation', 1024 * 1024 * 64);
-
-useMemoryUp(false);
-
-function useMemoryUp($performGC = false) {
-
+function useLotsOfMemory()
+{
 	$memData = '';
+	$dataSizeInKB = 64;
 
-	if ($performGC) {
-		echo "GC collection will be done - app should not crash.\n";
-	}
-	else {
-		echo "GC collection won't be done - app should crash.\n";
-	}
-	$dataSizeInKB = 128;
-
-	//Change this line if you tweak the parameters above.
+	//Change this line if you tweak the parameters.
 	ini_set('memory_limit', "64M");
-	
-	for ($y=0 ; $y<$dataSizeInKB ; $y++) {
-		for ($x=0 ; $x<32 ; $x++) { //1kB
+
+	for ($y = 0; $y < $dataSizeInKB; $y++) {
+		for ($x = 0; $x < 32; $x++) { //1kB
 			$memData .= md5(time() + (($y * 32) + $x));
 		}
 	}
 
 	file_put_contents("memdata.txt", $memData);
 
-	// This function creates a cyclic variable loop
-	function useSomeMemory($x) {
-		$data = [];
-		$data[$x] = file_get_contents("memdata.txt");
-		$data[$x + 1] = &$data;
-	};
+	for ($x = 0; $x < 2000; $x++) {
 
-	for($x=0 ; $x<1000 ; $x++) {
-		if (($x%10) == 0) {
-			echo "x = $x   " . number_format(memory_get_usage(true)) . "  " . memory_get_usage(false) . "\n";
-		}
 		$b = 0;
-		for ($y=0 ; $y<100 ; $y++) {
+		for ($y = 0; $y < 100; $y++) {
 			$a = $b + rand(0, 4);
 			$b = $a / 2;
 		}
 
-		useSomeMemory($x);
-		if ($performGC == true) {
-			gc_collect_cycles();
+		if (($x % 10) == 0) {
+			echo "x: $x mem: ".number_format(memory_get_usage(false))."\n";
 		}
-//		else {
-//			echo "would have called gc_collect\n";
-//		}
+
+		useSomeMemory($x);
 	}
 
-	printf("\nused: %10d | allocated: %10d | peak: %10d\n",
-		memory_get_usage(),
-		memory_get_usage(true),
-		memory_get_peak_usage(true)
-	);
+
 }
