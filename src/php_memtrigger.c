@@ -19,22 +19,39 @@
 #include "ext/standard/info.h"
 #include "php_memtrigger.h"
 #include "php_ticks.h"
+
+#include "zend.h"
+#include "zend_execute.h"
 #include "zend_gc.h"
 #include "ext/spl/spl_exceptions.h"
 
-
-
 #include <errno.h>
 
+int memtrigger_execute_initialized = 0;
 
 typedef struct _memtrigger_tick_function_entry {
 	int calling;
 	zval *callable;
 	long triggerBytes;
 	long resetBytes;
-	int triggered;
+	long disableSetting;
+	int disabled;
 } memtrigger_tick_function_entry;
 
+
+#if PHP_VERSION_ID >= 50500
+void memtrigger_execute(zend_execute_data *execute_data TSRMLS_DC);
+void (*memtrigger_old_execute)(zend_execute_data *execute_data TSRMLS_DC);
+void (*memtrigger_old_execute_internal)(zend_execute_data *execute_data_ptr, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+void (*memtrigger_execute_internal)(zend_execute_data *execute_data_ptr, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+void (*memtrack_old_execute_internal)(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
+
+#else
+void memtrigger_execute(zend_op_array *op_array TSRMLS_DC);
+void (*memtrigger_old_execute)(zend_op_array *op_array TSRMLS_DC);
+void memtrigger_execute_internal(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
+void (*memtrigger_old_execute_internal)(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
+#endif
 
 /* some prototypes for local functions */
 static void memtrigger_tick_function_dtor(memtrigger_tick_function_entry *tick_function_entry);
@@ -44,6 +61,15 @@ static void run_memtrigger_tick_functions(int tick_count);
 
 ZEND_DECLARE_MODULE_GLOBALS(memtrigger)
 static PHP_GINIT_FUNCTION(memtrigger);
+
+
+/* {{{ PHP_INI
+ */
+PHP_INI_BEGIN()
+    STD_PHP_INI_ENTRY("memtrigger.enabled", "1", PHP_INI_SYSTEM, OnUpdateBool, enabled, zend_memtrigger_globals, memtrigger_globals)
+PHP_INI_END()
+/* }}} */
+
 
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO(arginfo_memtrigger_void, 0)
@@ -100,7 +126,7 @@ void php_register_memtrigger_constants(INIT_FUNC_ARGS)
 static void php_memtrigger_register_errno_constants(INIT_FUNC_ARGS)
 {
 //#ifdef EINTR
-//	REGISTER_MSL_ERRNO_CONSTANT(EINTR);
+//	REGISTER_MEMTRIGGER_ERRNO_CONSTANT(EINTR);
 //#endif
 }
 
@@ -111,20 +137,58 @@ static PHP_GINIT_FUNCTION(memtrigger)
 
 PHP_RINIT_FUNCTION(memtrigger)
 {
+	if (!MEMTRIGGER_G(enabled)) {
+		return SUCCESS;
+	}
+
 	MEMTRIGGER_G(user_tick_functions) = NULL;
 	MEMTRIGGER_G(ticks_between_mem_check) = 100;
 	MEMTRIGGER_G(ticks_till_next_mem_check) = MEMTRIGGER_G(ticks_between_mem_check);
+
+	if (!MEMTRIGGER_G(initialized)) {
+#if PHP_VERSION_ID >= 50500
+		memtrigger_old_execute = zend_execute_ex;
+		zend_execute_ex = memtrigger_execute;
+#else
+		memtrigger_old_execute = zend_execute;
+		zend_execute = memtrigger_execute;
+#endif
+
+		memtrigger_old_execute_internal = zend_execute_internal;
+		zend_execute_internal = memtrigger_execute_internal;
+		MEMTRIGGER_G(initialized) = 1;
+	}
+
+	MEMTRIGGER_G(user_tick_functions) = (zend_llist *) emalloc(sizeof(zend_llist));
+	zend_llist_init(MEMTRIGGER_G(user_tick_functions),
+					sizeof(memtrigger_tick_function_entry),
+					(llist_dtor_func_t) memtrigger_tick_function_dtor, 0);
 
 	return SUCCESS;
 }
 
 PHP_MINIT_FUNCTION(memtrigger)
 {
+	REGISTER_INI_ENTRIES();
+
 	return SUCCESS;
 }
 
 PHP_MSHUTDOWN_FUNCTION(memtrigger)
 {
+	UNREGISTER_INI_ENTRIES();
+
+	if (memtrigger_execute_initialized) {
+
+		#if PHP_VERSION_ID >= 50500
+			zend_execute_ex = memtrigger_old_execute;
+		#else
+			zend_execute = memtrigger_old_execute;
+		#endif
+
+		zend_execute_internal = memtrigger_old_execute_internal;
+	}
+
 	return SUCCESS;
 }
 
@@ -147,7 +211,7 @@ PHP_MINFO_FUNCTION(memtrigger)
 }
 
 
-/* {{{ proto bool msl_init(int $ticks)
+/* {{{ proto bool memtrigger_init(int $ticks)
     */
 PHP_FUNCTION(memtrigger_init)
 {
@@ -159,9 +223,6 @@ PHP_FUNCTION(memtrigger_init)
 	}
 
 	MEMTRIGGER_G(ticks_between_mem_check) = ticks_between_mem_check;
-	
-	printf("Setting ticks_between_mem_check to %d\n", ticks_between_mem_check);
-
 }
 /* }}} */
 
@@ -173,9 +234,10 @@ PHP_FUNCTION(memtrigger_register)
 	zval *user_callback;
 	long triggerBytes = 0;
 	long resetBytes = 0;
+	long disableSetting = 1;
 
 	/* Parse parameters given to function */
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "lz|l", &triggerBytes, &user_callback, &resetBytes) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zl|ll", &user_callback, &triggerBytes, &resetBytes, &disableSetting) == FAILURE) {
 		printf("Failed to parse\n");
 		RETURN_FALSE;
 	}
@@ -192,16 +254,9 @@ PHP_FUNCTION(memtrigger_register)
 	tick_fe.callable = user_callback;
 	tick_fe.triggerBytes = triggerBytes;
 	tick_fe.resetBytes = resetBytes;
+	tick_fe.disableSetting = disableSetting;
 	tick_fe.calling = 0;
-	tick_fe.triggered = 0;
-
-	if (!MEMTRIGGER_G(user_tick_functions)) {
-		MEMTRIGGER_G(user_tick_functions) = (zend_llist *) emalloc(sizeof(zend_llist));
-		zend_llist_init(MEMTRIGGER_G(user_tick_functions),
-						sizeof(memtrigger_tick_function_entry),
-						(llist_dtor_func_t) memtrigger_tick_function_dtor, 0);
-		php_add_tick_function(run_memtrigger_tick_functions);
-	}
+	tick_fe.disabled = 0;
 
 	zend_llist_add_element(MEMTRIGGER_G(user_tick_functions), &tick_fe);
 
@@ -217,7 +272,7 @@ static void run_memtrigger_tick_functions(int tick_count) /* {{{ */
 	zend_llist_element *element;
 	int real_usage = 1;
 	long memory_usage;
-	int triggered = 0;
+	int triggers_run = 0;
 
 	MEMTRIGGER_G(ticks_till_next_mem_check) -= tick_count;
 
@@ -228,10 +283,11 @@ static void run_memtrigger_tick_functions(int tick_count) /* {{{ */
 	memory_usage = zend_memory_usage(real_usage TSRMLS_CC);
 
 	for (element=l->head; element; element=element->next) {
-		triggered += memtrigger_tick_function_call((memtrigger_tick_function_entry *)element->data, memory_usage TSRMLS_CC);
+		triggers_run += memtrigger_tick_function_call((memtrigger_tick_function_entry *)element->data, memory_usage TSRMLS_CC);
 	}
-	
-	if (triggered) {
+
+	if (triggers_run) {
+		// Do something clever to make checks more frequent
 		MEMTRIGGER_G(ticks_between_mem_check) = 50;
 	}
 
@@ -256,19 +312,21 @@ static int memtrigger_tick_function_call(memtrigger_tick_function_entry *tick_fe
 #endif
 
 	if (memory_usage < tick_fe->triggerBytes) {
-		if (tick_fe->triggered) {
-			if (memory_usage < tick_fe->resetBytes) {
-				tick_fe->triggered = 0;
-			}
+		if (tick_fe->disabled &&
+			tick_fe->resetBytes &&
+			memory_usage < tick_fe->resetBytes) {
+			tick_fe->disabled = 0;
 		}
 		return 0;
 	}
 
-	if (tick_fe->triggered) {
+	if (tick_fe->disabled) {
 		return 0;
 	}
 
-	//tick_fe->triggered = 1;
+	if (tick_fe->disableSetting) {
+		tick_fe->disabled = 1;
+	}
 
 	if (!tick_fe->calling) {
 		tick_fe->calling = 1;
@@ -304,6 +362,26 @@ static int memtrigger_tick_function_call(memtrigger_tick_function_entry *tick_fe
 	return 1;
 }
 /* }}} */
+
+
+
+#if PHP_VERSION_ID >= 50500
+void memtrigger_execute(zend_execute_data *execute_data TSRMLS_DC) /* {{{ */
+{
+#else
+void memtrigger_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
+{
+#endif
+
+	run_memtrigger_tick_functions(1);
+
+#if PHP_VERSION_ID >= 50500
+	memtrigger_old_execute(execute_data TSRMLS_CC);
+#else
+	memtrigger_old_execute(op_array TSRMLS_CC);
+#endif
+
+}
 
 
 

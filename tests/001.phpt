@@ -2,7 +2,7 @@
 Test memory soft limit functionality
 --SKIPIF--
 <?php
-	if (!extension_loaded("msl")) print "skip"; 
+	if (!extension_loaded("memtrigger")) print "skip memtrigger not loaded"; 
 ?>
 --FILE--
 <?php 
@@ -10,10 +10,9 @@ Test memory soft limit functionality
 function foo() {
 }
 
-msl_register(1024, 'foo');
+memtrigger_register('foo', 1024);
 
 echo "Module is loaded.\n";
-
 
 ?>
 --EXPECT--

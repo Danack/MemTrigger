@@ -1,41 +1,25 @@
 <?php
 
-declare(ticks=100);
+// declare(ticks=100);
 
 
 function logFunction()
 {
-	echo "Mem soft limit exceeded.\n";
-}
-
-function otherScope()
-{
-	echo "******************";
-	echo "Next Mem soft limit exceeded, calling GC when mem usage at ".memory_get_usage(true)."\n";
-	gc_collect_cycles();
-	echo "Mem used now : ".memory_get_usage(true)."\n";
+	echo "Memory warning limit exceeded.\n";
 }
 
 function logAndGC()
 {
-///	gc_collect_cycles();
 	echo "******************";
-	echo "Next Mem soft limit exceeded, calling GC when mem usage at ".memory_get_usage(true)."\n";
-	gc_collect_cycles();
-	gc_collect_cycles();
-	gc_collect_cycles();
-	gc_collect_cycles();
-	gc_collect_cycles();
+	echo "Memory danger limit exceeded exceeded, calling GC when mem usage at ".memory_get_usage(true)."\n";
 	gc_collect_cycles();
 	echo "Mem used now : ".memory_get_usage(true)."\n";
 }
 
 
-function logAndGC2()
+function throwException()
 {
-	echo "Next Mem soft limit exceeded2, calling GC when mem usage at ".memory_get_usage(true)."\n";
-	gc_collect_cycles();
-	echo "Mem used now : ".memory_get_usage(true)."\n";
+	throw new \Exception("Memory emergency limit exceeded.");
 }
 
 
@@ -44,12 +28,12 @@ function abortOperation()
 	throw new \Exception("Too much memory being used");
 }
 
-memtrigger_init(5000);
+memtrigger_init(500);
 
-//msl_register(1024 * 1024 * 4, 'logFunction');
-memtrigger_register(1024 * 1024 * 8, 'logAndGC');
-//msl_register(1024 * 1024 * 32, 'logAndGC2');
-//msl_register(1024 * 1024 * 64, 'abortOperation');
+//memtrigger_register('logFunction', 1024 * 1024 * 4);
+//memtrigger_register('logAndGC', 1024 * 1024 * 8, 1024 * 1024 * 8, 0);
+memtrigger_register('throwException', 1024 * 1024 * 16);
+//memtrigger_register('abortOperation', 1024 * 1024 * 64);
 
 useMemoryUp(false);
 
@@ -87,11 +71,11 @@ function useMemoryUp($performGC = false) {
 		if (($x%10) == 0) {
 			echo "x = $x   " . number_format(memory_get_usage(true)) . "  " . memory_get_usage(false) . "\n";
 		}
-//		$b = 0;
-//		for ($y=0 ; $y<100 ; $y++) {
-//			$a = $b + rand(0, 4);
-//			$b = $a / 2;
-//		}
+		$b = 0;
+		for ($y=0 ; $y<100 ; $y++) {
+			$a = $b + rand(0, 4);
+			$b = $a / 2;
+		}
 
 		useSomeMemory($x);
 		if ($performGC == true) {

@@ -1,4 +1,4 @@
-Memory Soft Limits (msl)
+MemTrigger
 
 This module allows user defined functions to be called when memory limits are passed.
 

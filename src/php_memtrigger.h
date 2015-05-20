@@ -19,6 +19,8 @@ PHP_FUNCTION(memtrigger_register);
 PHP_FUNCTION(memtrigger_init);
 
 ZEND_BEGIN_MODULE_GLOBALS(memtrigger)
+	long initialized;
+	zend_bool enabled;
 	zend_llist *user_tick_functions;
 	long ticks_between_mem_check;
 	long ticks_till_next_mem_check;
