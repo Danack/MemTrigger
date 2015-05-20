@@ -1,0 +1,12 @@
+Memory Soft Limits (msl)
+
+This module allows user defined functions to be called when memory limits are passed.
+
+Thanks,
+
+Dan Ackroyd < danack@basereality.com / danack@php.net >
+
+
+
+
+

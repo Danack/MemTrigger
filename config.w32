@@ -1,0 +1,8 @@
+// $Id: config.w32 274377 2009-01-23 15:22:57Z pajoye $
+// vim:ft=javascript
+
+ARG_ENABLE("msl", "Enable memory soft limit support", "no");
+
+if (PHP_MSL != "no") {
+	EXTENSION("msl", "php_msl.c msl.c");
+}
