@@ -9,6 +9,12 @@ extern zend_module_entry memtrigger_module_entry;
 #include "php_version.h"
 #define PHP_MEMTRIGGER_VERSION PHP_VERSION
 
+
+
+extern zend_class_entry *php_memtrigger_sc_entry;
+extern zend_class_entry *php_memtrigger_exception_class_entry;
+
+
 PHP_MINIT_FUNCTION(memtrigger);
 PHP_MSHUTDOWN_FUNCTION(memtrigger);
 PHP_RINIT_FUNCTION(memtrigger);
@@ -21,7 +27,7 @@ PHP_FUNCTION(memtrigger_init);
 ZEND_BEGIN_MODULE_GLOBALS(memtrigger)
 	long initialized;
 	zend_bool enabled;
-	zend_llist *user_tick_functions;
+	HashTable *user_triggers;
 	long ticks_between_mem_check;
 	long ticks_till_next_mem_check;
 ZEND_END_MODULE_GLOBALS(memtrigger)

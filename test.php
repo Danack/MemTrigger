@@ -1,12 +1,19 @@
 <?php
 
-memtrigger_init(5);
 
 $MB = 1024 * 1024;
 
-memtrigger_register('logFunction', 4 * $MB);
-memtrigger_register('logAndGC', 8 * $MB, 8 * $MB, 0);
-memtrigger_register('throwException', 32 * $MB, 32 * $MB, 0);
+
+$logTrigger = new MemTrigger('logFunction', 4 * $MB, MemTrigger::ACTION_DISABLE);
+$logAndGCTrigger = new MemTrigger('logAndGC', 8 * $MB, MemTrigger::ACTION_LEAVE_ACTIVE);
+$abortTrigger = new MemTrigger('throwException', 32 * $MB, MemTrigger::ACTION_DISABLE);
+
+
+memtrigger_init(5);
+//memtrigger_register($logTrigger);
+memtrigger_register($logAndGCTrigger);
+//memtrigger_register($abortTrigger);
+
 
 try {
 	useLotsOfMemory();
@@ -40,6 +47,7 @@ function logAndGC()
 function throwException()
 {
 	throw new \Exception("Memory emergency limit exceeded.");
+	///return MEMTRIGGER_THROW;
 }
 
 
@@ -53,6 +61,8 @@ function useSomeMemory($x)
 
 function useLotsOfMemory()
 {
+	global $ticks;
+	
 	$memData = '';
 	$dataSizeInKB = 64;
 
@@ -76,7 +86,7 @@ function useLotsOfMemory()
 		}
 
 		if (($x % 10) == 0) {
-			echo "x: $x mem: ".number_format(memory_get_usage(false))."\n";
+			echo "x: $x ticks: $ticks mem: ".number_format(memory_get_usage(false))."\n";
 		}
 
 		useSomeMemory($x);
