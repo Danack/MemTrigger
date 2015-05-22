@@ -19,11 +19,16 @@ class MemTrigger {
 	const ACTION_DISABLE = 1;
 
 	const STATE_ACTIVE = 0;
-	const STATE_DISABLE = 1;
+	const STATE_DISABLED = 1;
 
 	const TYPE_ABOVE = 0;
 	const TYPE_BELOW = 1;
 
+	
+	function __construct(callable $callback, $value, $action, $type = 0, $state = 0)
+	{
+
+	}
 	
 	/**
 	 * @param $newValue

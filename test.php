@@ -1,12 +1,20 @@
 <?php
 
 
+
+
+$logAndGC = function () {
+	echo "** Memory warning limit exceeded exceeded, calling GC when mem usage at ".number_format(memory_get_usage(false))."\n";
+	gc_collect_cycles();
+	echo "** Mem used now : ".number_format(memory_get_usage(false))."\n";
+};
+
 $MB = 1024 * 1024;
+$logAndGCTrigger = new MemTrigger($logAndGC, 8 * $MB, MemTrigger::ACTION_LEAVE_ACTIVE);
 
 
-$logTrigger = new MemTrigger('logFunction', 4 * $MB, MemTrigger::ACTION_DISABLE);
-$logAndGCTrigger = new MemTrigger('logAndGC', 8 * $MB, MemTrigger::ACTION_LEAVE_ACTIVE);
-$abortTrigger = new MemTrigger('throwException', 32 * $MB, MemTrigger::ACTION_DISABLE);
+//$logTrigger = new MemTrigger('logFunction', 4 * $MB, MemTrigger::ACTION_DISABLE);
+//$abortTrigger = new MemTrigger('throwException', 32 * $MB, MemTrigger::ACTION_DISABLE);
 
 
 memtrigger_init(5);
@@ -36,12 +44,7 @@ function logFunction()
 	echo "Memory info limit exceeded.\n";
 }
 
-function logAndGC()
-{
-	echo "** Memory warning limit exceeded exceeded, calling GC when mem usage at ".number_format(memory_get_usage(false))."\n";
-	gc_collect_cycles();
-	echo "** Mem used now : ".number_format(memory_get_usage(false))."\n";
-}
+
 
 
 function throwException()

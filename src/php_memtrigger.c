@@ -38,15 +38,6 @@
 
 // Structs
 
-//typedef struct _memtrigger_tick_function_entry {
-//	int calling;
-//	zval *callable;
-//	long triggerBytes;
-//	long resetBytes;
-//	long disableSetting;
-//	int disabled;
-//} memtrigger_tick_function_entry;
-
 
 // Variables
 
@@ -59,10 +50,6 @@ zend_class_entry *php_memtrigger_exception_class_entry;
 
 // Data
 
-
-//ZEND_BEGIN_ARG_INFO_EX(memtrigger_setTriggerValue_args, 0, 0, 1)
-//	ZEND_ARG_OBJ_INFO(0, ImagickKernel, ImagickKernel, 0)
-//ZEND_END_ARG_INFO()
 
 
 ZEND_BEGIN_ARG_INFO_EX(memtrigger_zero_args, 0, 0, 0)
@@ -221,7 +208,7 @@ void (*memtrigger_old_execute_internal)(zend_execute_data *current_execute_data,
 #endif
 
 /* some prototypes for local functions */
-static void memtrigger_tick_function_dtor(php_memtrigger_object *tick_function_entry);
+
 static int memtrigger_tick_function_call(php_memtrigger_object *tick_fe, long memory_usage TSRMLS_DC);
 static void run_memtrigger_tick_functions();
 
@@ -258,12 +245,6 @@ zend_module_entry memtrigger_module_entry = {
 ZEND_GET_MODULE(memtrigger)
 #endif
 
-static void php_memtrigger_register_errno_constants(INIT_FUNC_ARGS)
-{
-//#ifdef EINTR
-//	REGISTER_MEMTRIGGER_ERRNO_CONSTANT(EINTR);
-//#endif
-}
 
 static PHP_GINIT_FUNCTION(memtrigger)
 {
@@ -614,12 +595,6 @@ end:
 #endif
 
 
-
-static void memtrigger_tick_function_dtor(php_memtrigger_object *tick_function_entry) /* {{{ */
-{
-	//remove reference to the callable zval
-}
-/* }}} */
 
 
 #if PHP_VERSION_ID >= 50500
