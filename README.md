@@ -20,6 +20,9 @@ memtrigger_register($logAndGCTrigger);
 
 ```
 
+The class methods and constants are documented in ./stubs.php
+
+
 ## How to compile
 
 phpize

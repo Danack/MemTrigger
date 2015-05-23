@@ -48,10 +48,15 @@ PHP_METHOD(memtrigger, __construct)
 
 	memtrigger = Z_MEMTRIGGER_P(getThis());
 
+#ifdef ZEND_ENGINE_3
+	Z_TRY_ADDREF_P(callback);
+	ZVAL_COPY_VALUE(&memtrigger->callable, callback);
+#else
 	Z_ADDREF_P(callback);
+	memtrigger->callable = callback;
+#endif
 
 	memtrigger->calling = 0;
-	memtrigger->callable = callback;
 	memtrigger->value = value;
 	memtrigger->action = action;
 	memtrigger->state = state;

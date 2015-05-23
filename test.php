@@ -62,6 +62,11 @@ function useSomeMemory($x)
 	$data[$x + 1] = &$data;
 }
 
+function bar($x)
+{
+	//echo "adsd".$x;
+}
+
 function useLotsOfMemory()
 {
 	global $ticks;
@@ -86,6 +91,11 @@ function useLotsOfMemory()
 		for ($y = 0; $y < 100; $y++) {
 			$a = $b + rand(0, 4);
 			$b = $a / 2;
+		}
+		if (rand(0, 2)) {
+			$b /= 2;
+			$b += 0.5;
+			bar($b);
 		}
 
 		if (($x % 10) == 0) {

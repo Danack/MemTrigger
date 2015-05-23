@@ -26,11 +26,12 @@
 /* Structure for MemTrigger object. */
 typedef struct _php_memtrigger_object  {
 	long calling;
-	zval *callable;
+	zval callable;
 	long value;
 	long action;
 	long state;
 	long type;
+	zval *zself;//we store the zval that contains this object, to avoid having to retrieve it
 	zend_object zo;
 } php_memtrigger_object;
 #else
@@ -75,6 +76,13 @@ PHP_METHOD(memtrigger, getAction);
 
 #define PHP_MEMTRIGGER_SC_NAME "MemTrigger"
 #define PHP_MEMTRIGGER_EXCEPTION_SC_NAME "MemTriggerException"
+
+#ifdef ZEND_ENGINE_3
+	#define MEMTRIGGER_LEN_TYPE size_t
+#else
+	#define MEMTRIGGER int
+#endif
+
 
 
 #endif

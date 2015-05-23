@@ -10,6 +10,8 @@
 #define IF_DEBUG(z)
 #endif
 
+
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -32,6 +34,8 @@
 
 #include <errno.h>
 
+ZEND_DECLARE_MODULE_GLOBALS(memtrigger)
+static PHP_GINIT_FUNCTION(memtrigger);
 
 // Defines
 
@@ -87,8 +91,6 @@ ZEND_END_ARG_INFO()
 
 
 // Data
-
-
 const zend_function_entry memtrigger_functions[] = {
 	PHP_FE(memtrigger_init, arginfo_memtrigger_init)
 	PHP_FE(memtrigger_register, arginfo_memtrigger_register)
@@ -99,16 +101,10 @@ const zend_function_entry memtrigger_functions[] = {
 static zend_function_entry php_memtrigger_class_methods[] =
 {
 	PHP_ME(memtrigger, __construct, memtrigger_constructor_args, ZEND_ACC_PUBLIC|ZEND_ACC_CTOR)
-
 	PHP_ME(memtrigger, setValue, memtrigger_value_arg, ZEND_ACC_PUBLIC)
 	PHP_ME(memtrigger, getValue, memtrigger_zero_args, ZEND_ACC_PUBLIC)
-
-//	PHP_ME(memtrigger, setResetValue, memtrigger_value_arg, ZEND_ACC_PUBLIC)
-//	PHP_ME(memtrigger, getResetValue, memtrigger_zero_args, ZEND_ACC_PUBLIC)
-
 	PHP_ME(memtrigger, setState, memtrigger_setState_args, ZEND_ACC_PUBLIC)
 	PHP_ME(memtrigger, getState, memtrigger_zero_args, ZEND_ACC_PUBLIC)
-
 	PHP_ME(memtrigger, setAction, memtrigger_setTriggerAction_args, ZEND_ACC_PUBLIC)
 	PHP_ME(memtrigger, getAction, memtrigger_zero_args, ZEND_ACC_PUBLIC)
 
@@ -123,8 +119,8 @@ static void php_memtrigger_object_free_storage(MEMTRIGGER_ZEND_OBJECT *object TS
 		return;
 	}
 
-	zend_object_std_dtor(&intern->zo TSRMLS_CC);
 #ifndef ZEND_ENGINE_3
+	zend_object_std_dtor(&intern->zo TSRMLS_CC);
 	efree(intern);
 #endif
 }
@@ -173,12 +169,10 @@ static zend_object_value php_memtrigger_object_new_ex(zend_class_entry *class_ty
 #endif
 }
 
-
-//#undef object_properties_init
-
 #ifdef ZEND_ENGINE_3
 static zend_object * php_memtrigger_object_new(zend_class_entry *class_type TSRMLS_DC) {
 	return php_memtrigger_object_new_ex(class_type, NULL TSRMLS_CC);
+}
 #else
 static zend_object_value php_memtrigger_object_new(zend_class_entry *class_type TSRMLS_DC) {
 	return php_memtrigger_object_new_ex(class_type, NULL TSRMLS_CC);
@@ -186,34 +180,22 @@ static zend_object_value php_memtrigger_object_new(zend_class_entry *class_type 
 #endif
 
 
-
-
-#if PHP_VERSION_ID >= 50500
-//Forward declare functions
-void memtrigger_execute(zend_execute_data *execute_data TSRMLS_DC);
-void memtrigger_execute_internal(zend_execute_data *execute_data_ptr, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC);
-
-//Declare function pointers
+//Forward declare functions and function pointers
+#if PHP_VERSION_ID >= 70000
+ZEND_API void memtrigger_execute_ex(zend_execute_data *execute_data);
+ZEND_API void (*memtrigger_old_execute)(zend_execute_data *execute_data);
+#elif PHP_VERSION_ID >= 50500
+void memtrigger_execute_ex(zend_execute_data *execute_data TSRMLS_DC);
 void (*memtrigger_old_execute)(zend_execute_data *execute_data TSRMLS_DC);
-void (*memtrigger_old_execute_internal)(zend_execute_data *execute_data_ptr, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC);
-
 #else
-//Forward declare functions
 void memtrigger_execute(zend_op_array *op_array TSRMLS_DC);
-void memtrigger_execute_internal(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
-
-//Declare function pointers
 void (*memtrigger_old_execute)(zend_op_array *op_array TSRMLS_DC);
-void (*memtrigger_old_execute_internal)(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
 #endif
+
+static int memtrigger_tick_function_call(php_memtrigger_object *memtrigger, long memory_usage TSRMLS_DC);
 
 /* some prototypes for local functions */
 
-static int memtrigger_tick_function_call(php_memtrigger_object *tick_fe, long memory_usage TSRMLS_DC);
-static void run_memtrigger_tick_functions();
-
-ZEND_DECLARE_MODULE_GLOBALS(memtrigger)
-static PHP_GINIT_FUNCTION(memtrigger);
 
 /* {{{ PHP_INI
  */
@@ -221,7 +203,6 @@ PHP_INI_BEGIN()
     STD_PHP_INI_ENTRY("memtrigger.enabled", "1", PHP_INI_SYSTEM, OnUpdateBool, enabled, zend_memtrigger_globals, memtrigger_globals)
 PHP_INI_END()
 /* }}} */
-
 
 
 zend_module_entry memtrigger_module_entry = {
@@ -242,6 +223,9 @@ zend_module_entry memtrigger_module_entry = {
 };
 
 #ifdef COMPILE_DL_MEMTRIGGER
+#ifdef ZTS
+ZEND_TSRMLS_CACHE_DEFINE();
+#endif
 ZEND_GET_MODULE(memtrigger)
 #endif
 
@@ -264,16 +248,16 @@ PHP_RINIT_FUNCTION(memtrigger)
 	if (!MEMTRIGGER_G(initialized)) {
 #if PHP_VERSION_ID >= 50500
 		memtrigger_old_execute = zend_execute_ex;
-		zend_execute_ex = memtrigger_execute;
+		zend_execute_ex = memtrigger_execute_ex;
 #else
 		memtrigger_old_execute = zend_execute;
-		zend_execute = memtrigger_execute;
+		zend_execute = memtrigger_execute_ex;
 #endif
-	// TODO - do we care about this?
-		if (zend_execute_internal) {
-			memtrigger_old_execute_internal = zend_execute_internal;
-			zend_execute_internal = memtrigger_execute_internal;
-		}
+//		// TODO - do we care about this?
+//		if (zend_execute_internal) {
+//			memtrigger_old_execute_internal = zend_execute_internal;
+//			zend_execute_internal = memtrigger_execute_internal;
+//		}
 		MEMTRIGGER_G(initialized) = 1;
 	}
 
@@ -330,14 +314,11 @@ PHP_MSHUTDOWN_FUNCTION(memtrigger)
 	UNREGISTER_INI_ENTRIES();
 
 	if (memtrigger_execute_initialized) {
-
 		#if PHP_VERSION_ID >= 50500
 			zend_execute_ex = memtrigger_old_execute;
 		#else
 			zend_execute = memtrigger_old_execute;
 		#endif
-
-		zend_execute_internal = memtrigger_old_execute_internal;
 	}
 
 	return SUCCESS;
@@ -346,7 +327,9 @@ PHP_MSHUTDOWN_FUNCTION(memtrigger)
 PHP_RSHUTDOWN_FUNCTION(memtrigger)
 {
 	if (MEMTRIGGER_G(user_triggers)) {
-		efree(MEMTRIGGER_G(user_triggers));
+#ifndef ZEND_ENGINE_3
+		//efree(MEMTRIGGER_G(user_triggers));
+#endif
 		MEMTRIGGER_G(user_triggers) = NULL;
 	}
 
@@ -389,17 +372,69 @@ PHP_FUNCTION(memtrigger_register)
 
 	//memtrigger = Z_MEMTRIGGER_P(objvar);
 	Z_ADDREF_P(objvar);
+
+#ifdef ZEND_ENGINE_3
+	zend_hash_next_index_insert(MEMTRIGGER_G(user_triggers), objvar);
+#else
 	zend_hash_next_index_insert(MEMTRIGGER_G(user_triggers), &objvar, sizeof(zval *), NULL);
+#endif
 
 	RETURN_TRUE;
 }
 /* }}} */
 
+#ifdef ZEND_ENGINE_3
 
-static void run_memtrigger_tick_functions() /* {{{ */
+
+static void run_memtrigger_tick_functions(int opcodes) /* {{{ */
 {
 	TSRMLS_FETCH();
-	
+
+	zend_llist_element *element;
+	long memory_usage;
+	int triggers_run = 0;
+	zval *pzval;
+	int i;
+	php_memtrigger_object *trigger;
+
+	HashTable *triggers = MEMTRIGGER_G(user_triggers);
+	//struct timeval tp = {0};
+	//gettimeofday(&tp, NULL)
+
+//	if (opcodes) {
+//		printf("opcodes = %d\n", opcodes);
+//	}
+
+	MEMTRIGGER_G(ticks_till_next_mem_check) -= 1;
+
+	if (MEMTRIGGER_G(ticks_till_next_mem_check) > 0) {
+		return;
+	}
+
+	memory_usage = zend_memory_usage(0 TSRMLS_CC);
+
+	ZEND_HASH_FOREACH_VAL(triggers, pzval) {
+		trigger = Z_MEMTRIGGER_P(pzval);
+		triggers_run += memtrigger_tick_function_call(trigger, memory_usage TSRMLS_CC);
+	} ZEND_HASH_FOREACH_END();
+
+	if (triggers_run) {
+		if (MEMTRIGGER_G(ticks_between_mem_check) > 50) {
+			// Do something clever to make checks more frequent when something has been triggered.
+			// MEMTRIGGER_G(ticks_between_mem_check) = 50;
+		}
+	}
+
+	MEMTRIGGER_G(ticks_till_next_mem_check) = MEMTRIGGER_G(ticks_between_mem_check);
+}
+
+
+#else 
+
+static void run_memtrigger_tick_functions(int opcodes) /* {{{ */
+{
+	TSRMLS_FETCH();
+
 	zend_llist_element *element;
 	long memory_usage;
 	int triggers_run = 0;
@@ -410,6 +445,10 @@ static void run_memtrigger_tick_functions() /* {{{ */
 	HashTable *triggers = MEMTRIGGER_G(user_triggers);
 	//struct timeval tp = {0};
 	//gettimeofday(&tp, NULL)
+	
+//	if (opcodes) {
+//		printf("opcodes = %d\n", opcodes);
+//	}
 
 	MEMTRIGGER_G(ticks_till_next_mem_check) -= 1;
 
@@ -435,12 +474,15 @@ static void run_memtrigger_tick_functions() /* {{{ */
 
 	MEMTRIGGER_G(ticks_till_next_mem_check) = MEMTRIGGER_G(ticks_between_mem_check);
 }
+#endif
+
+
 /* }}} */
 
 
 static int memtrigger_tick_function_call(php_memtrigger_object *memtrigger, long memory_usage TSRMLS_DC) /* {{{ */
 {
-	zval retval;
+	//zval retval;
 	int error;
 	zend_fcall_info fci;
 	zend_fcall_info_cache fci_cache;
@@ -490,7 +532,7 @@ static int memtrigger_tick_function_call(php_memtrigger_object *memtrigger, long
 		fci.function_table = EG(function_table);
 	#ifdef ZEND_ENGINE_3
 		fci.object = NULL;
-		ZVAL_COPY_VALUE(&fci.function_name, &tick_fe->callable);
+		ZVAL_COPY_VALUE(&fci.function_name, &memtrigger->callable);
 		fci.retval = &retval;
 	#else
 		retval_ptr = NULL;
@@ -517,7 +559,7 @@ static int memtrigger_tick_function_call(php_memtrigger_object *memtrigger, long
 }
 /* }}} */
 
-#define MEMTRIGGER_STABLE
+//#define MEMTRIGGER_STABLE
 
 #ifdef MEMTRIGGER_STABLE
 #if PHP_VERSION_ID >= 50500
@@ -540,18 +582,108 @@ void memtrigger_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 #else
 
 
-ZEND_API void memtrigger_execute(zend_execute_data *execute_data TSRMLS_DC)
+#ifdef ZEND_ENGINE_3
+
+#ifdef ZEND_VM_FP_GLOBAL_REG
+# define ZEND_OPCODE_HANDLER_RET int
+# define ZEND_OPCODE_HANDLER_ARGS void
+# define ZEND_OPCODE_HANDLER_ARGS_PASSTHRU
+# define ZEND_OPCODE_HANDLER_ARGS_DC
+# define ZEND_OPCODE_HANDLER_ARGS_PASSTHRU_CC
+#else
+# define ZEND_OPCODE_HANDLER_RET int
+# define ZEND_OPCODE_HANDLER_ARGS zend_execute_data *execute_data
+# define ZEND_OPCODE_HANDLER_ARGS_PASSTHRU execute_data
+# define ZEND_OPCODE_HANDLER_ARGS_DC , ZEND_OPCODE_HANDLER_ARGS
+# define ZEND_OPCODE_HANDLER_ARGS_PASSTHRU_CC , ZEND_OPCODE_HANDLER_ARGS_PASSTHRU
+#endif
+
+
+
+#undef OPLINE
+#undef DCL_OPLINE
+#undef USE_OPLINE
+#undef LOAD_OPLINE
+#undef SAVE_OPLINE
+#define DCL_OPLINE
+#ifdef ZEND_VM_IP_GLOBAL_REG
+# define OPLINE opline
+# define USE_OPLINE
+# define LOAD_OPLINE() opline = EX(opline)
+# define SAVE_OPLINE() EX(opline) = opline
+#else
+# define OPLINE EX(opline)
+# define USE_OPLINE const zend_op *opline = EX(opline);
+# define LOAD_OPLINE()
+# define SAVE_OPLINE()
+#endif
+
+
+typedef ZEND_OPCODE_HANDLER_RET (ZEND_FASTCALL *opcode_handler_t) (ZEND_OPCODE_HANDLER_ARGS);
+
+
+ZEND_API void memtrigger_execute_ex(zend_execute_data *ex)
+{
+	int oplines = 0;
+	//DCL_OPLINE
+
+#ifdef ZEND_VM_IP_GLOBAL_REG
+	const zend_op *orig_opline = opline;
+#endif
+#ifdef ZEND_VM_FP_GLOBAL_REG
+	zend_execute_data *orig_execute_data = execute_data;
+	execute_data = ex;
+#else
+	zend_execute_data *execute_data = ex;
+#endif
+
+
+//	LOAD_OPLINE();
+
+	while (1) {
+		int ret;
+		oplines++;
+		if (UNEXPECTED((ret = ((opcode_handler_t)OPLINE->handler)(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU)) != 0)) {
+#ifdef ZEND_VM_FP_GLOBAL_REG
+			execute_data = orig_execute_data;
+# ifdef ZEND_VM_IP_GLOBAL_REG
+			opline = orig_opline;
+# endif
+			goto end;
+#else
+			if (EXPECTED(ret > 0)) {
+				execute_data = EG(current_execute_data);
+			} else {
+# ifdef ZEND_VM_IP_GLOBAL_REG
+				opline = orig_opline;
+# endif
+				goto end;
+			}
+#endif
+		}
+
+	}
+	zend_error_noreturn(E_ERROR, "Arrived at end of main loop which shouldn't happen");
+
+
+end:
+	run_memtrigger_tick_functions(oplines);
+}
+
+#else
+
+ZEND_API void memtrigger_execute_ex(zend_execute_data *execute_data TSRMLS_DC)
 {
 	zend_bool original_in_execution;
 	int op_codes = 1;
 
-
 	original_in_execution = EG(in_execution);
 	EG(in_execution) = 1;
 
+
 	if (0) {
 zend_vm_enter:
-    op_codes++;
+
 
 #if PHP_VERSION_ID >= 50500
 	execute_data =  zend_create_execute_data_from_op_array(EG(active_op_array), 1 TSRMLS_CC);
@@ -568,6 +700,7 @@ zend_vm_enter:
 		}
 #endif
 
+		op_codes++;
 		zend_op *opline = execute_data->opline;
 		if ((ret = opline->handler(execute_data TSRMLS_CC)) > 0) {
 			switch (ret) {
@@ -590,7 +723,7 @@ zend_vm_enter:
 end:
 	run_memtrigger_tick_functions(op_codes);
 }
-
+#endif //ZEND_ENGINE_3
 
 #endif
 
