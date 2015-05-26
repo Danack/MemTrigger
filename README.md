@@ -13,10 +13,10 @@ $logAndGC = function () {
 };
 
 $MB = 1024 * 1024;
-$logAndGCTrigger = new MemTrigger($logAndGC, 8 * $MB, MemTrigger::ACTION_LEAVE_ACTIVE);
+$logAndGCTrigger = new Trigger($logAndGC, 8 * $MB, Trigger::ACTION_LEAVE_ACTIVE);
 
-memtrigger_init(5);
-memtrigger_register($logAndGCTrigger);
+trigger_init(5);
+trigger_register($logAndGCTrigger);
 
 ```
 
@@ -26,18 +26,35 @@ The class methods and constants are documented in ./stubs.php
 ## How to compile
 
 phpize
-./configure
+./configure 
 make install
+
+
+By default the implementation hooks into the memory allocations for PHP 7. For PHP 5.6 it hook into the opcode execution.
+
+
+
+To specify that the tracking 
+
 
 ## How it works and limitations
 
-The extension replaces zend_execute_ex with a new function that both monitors the memory usage and calls the triggers when necessary, as well as calling the previous zend_execute_ex function.
+-dtrigger.mode=mem
+
+php -dextension=./modules/trigger.so -dtrigger.mode=opcode ./test.php 
+
+
+### Memory allocation hook
+
+
+
+
+### Opcode hook
+
+In this mode, the extension replaces zend_execute_ex with a new function that both monitors the memory usage and calls the triggers when necessary, as well as calling the previous zend_execute_ex function.
 
 Because of this it is not possible for all out of memory problems to be avoided. If either a single massive allocation uses more than the available remaining memory, or several very large allocations take quickly, this extension will not have a chance to detect and call a trigger about the large memory use.
-
-The situation this library is useful for is when a script uses up memory continually without releasing it. 
-
-
+ 
 
 ## TODO
 

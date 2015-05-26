@@ -1,8 +1,6 @@
 <?php
 
 
-
-
 $logAndGC = function () {
 	echo "** Memory warning limit exceeded exceeded, calling GC when mem usage at ".number_format(memory_get_usage(false))."\n";
 	gc_collect_cycles();
@@ -10,17 +8,15 @@ $logAndGC = function () {
 };
 
 $MB = 1024 * 1024;
-$logAndGCTrigger = new MemTrigger($logAndGC, 8 * $MB, MemTrigger::ACTION_LEAVE_ACTIVE);
+$logAndGCTrigger = new Trigger($logAndGC, 8 * $MB, Trigger::ACTION_LEAVE_ACTIVE);
 
 
 //$logTrigger = new MemTrigger('logFunction', 4 * $MB, MemTrigger::ACTION_DISABLE);
 //$abortTrigger = new MemTrigger('throwException', 32 * $MB, MemTrigger::ACTION_DISABLE);
 
 
-memtrigger_init(5);
-//memtrigger_register($logTrigger);
-memtrigger_register($logAndGCTrigger);
-//memtrigger_register($abortTrigger);
+\trigger\init(5);
+\trigger\register($logAndGCTrigger);
 
 
 try {
